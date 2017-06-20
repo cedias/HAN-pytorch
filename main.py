@@ -166,9 +166,10 @@ def accuracy(out,truth):
     return all_eq, all_eq/truth.size(0)*100
 
 def main(args):
+    print(32*"-"+"\nHierarchical Attention Network:\n" + 32*"-")
+    print("\nLoading Data:\n" + 25*"-")
 
     max_features = args.max_feat
-
     datadict = pkl.load(open(args.filename,"rb"))
     tuples = datadict["data"]
     splits  = datadict["splits"]
@@ -176,81 +177,53 @@ def main(args):
 
     if args.split not in split_keys:
         print("Chosen split (#{}) not in split set {}".format(args.split,split_keys))
+    else:
+        print("Split #{} chosen".format(args.split))
 
     train_set,test_set = TuplesListDataset.build_train_test(tuples,splits,args.split)
 
+    print("Train set length:",len(train_set))
+    print("Test set length:",len(test_set))
+
     classes = train_set.get_class_dict(1)
-    print(classes)
     num_class = len(classes)
 
+    
+    print(25*"-"+"\nClass stats:\n" + 25*"-")
+    print("Train set:\n" + 10*"-")
 
     class_stats,class_per = train_set.get_stats(1)
-    test_stats,test_per = test_set.get_stats(1)
     print(class_stats)
     print(class_per)
+
+    print(10*"-" + "\n Test set:\n" + 10*"-")
+    
+    test_stats,test_per = test_set.get_stats(1)
     print(test_stats) 
     print(test_per)
-    
 
-    # class_stats = train_set.get_stats(1)
 
-    # print(class_stats)
-    # sumv = sum([v for k,v in class_stats.items()])
-    # class_per = {k:(v/sumv) for k,v  in class_stats.items()}
-    # print(class_per)
-
-    # print(test_set.get_stats(1))
-
-    # num_class = len(class_stats)
-    # class_weights = torch.FloatTensor(num_class)
-    # for k,w in class_per.items():
-    #     class_weights[int(k)] = w
+    print(25*"-" + "\nBuilding word vectors: \n"+"-"*25)
 
     vectorizer = Vectorizer(max_word_len=args.max_words,max_sent_len=args.max_sents)
-    
-
-    if args.emb:
-        print("Loading {} as embedding dictionnary".format(args.emb))
-        tensor,dic_w = load_embeddings(args.emb)
-        vectorizer.word_dict = dic_w
-        #vectorizer
-    else:
-
-        vectorizer.build_dict(train_set.field_iter(0),args.max_feat)
+    vectorizer.build_dict(train_set.field_iter(0),args.max_feat)
 
     tuple_batch = tuple_batcher_builder(vectorizer,train=True)
     tuple_batch_test = tuple_batcher_builder(vectorizer,train=False)
-    bucketspl = BucketSampler(train_set)
-    bucketspl_test = BucketSampler(test_set) 
  
-    print(len(train_set))
-    print(len(test_set))
+    
 
-    dataloader = DataLoader(train_set, batch_size=args.b_size, shuffle=True, sampler=bucketspl, num_workers=1, collate_fn=tuple_batch)#, collate_fn=<function default_collate>, pin_memory=False)
+    sampler = None
+    if args.balance:
+        sampler =  BucketSampler(train_set)
+
+
+    dataloader = DataLoader(train_set, batch_size=args.b_size, shuffle=True, sampler=sampler, num_workers=1, collate_fn=tuple_batch)#, collate_fn=<function default_collate>, pin_memory=False)
     dataloader_test = DataLoader(test_set, batch_size=args.b_size, shuffle=True,  num_workers=1, collate_fn=tuple_batch_test)#, collate_fn=<function default_collate>, pin_memory=False)
 
 
-
-    # if args.output:
-    #     dataset.save(args.output)
-   
-
-    # #print(dataset.get_stats())
-    # if args.class_weights:
-    #     class_weights = 1-class_weights
-    #     if args.cuda:
-    #         class_weights = class_weights.cuda()
-
-    #     criterion = torch.nn.CrossEntropyLoss(weight=class_weights)
-    # else:
     criterion = torch.nn.CrossEntropyLoss()
-    
-
-    # dataset.x = dataset.x[0:1000]
-    # dataset.y = dataset.y[0:1000]
-    
-    # dataset.x_test = dataset.x_test[0:1000]
-    # dataset.y_test = dataset.y_test[0:1000]    
+      
 
  
     net = HierarchicalDoc(ntoken=len(vectorizer.word_dict),num_class=num_class)
@@ -260,7 +233,8 @@ def main(args):
 
     if args.cuda:
         net.cuda()
-
+    
+    print("-"*20)
 
 
     optimizer = optim.RMSprop(net.parameters(),lr=args.lr)
@@ -272,13 +246,9 @@ def main(args):
         test(epoch,net,dataloader_test,args.cuda)
 
 
-        #if args.output:
-        #    checkpoint(epoch,net,args.output)
-
-
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Hierarchical Classif')
+    parser = argparse.ArgumentParser(description='Hierarchical Attention Networks for Document Classification')
     parser.add_argument("--split", type=int, default=0)
     parser.add_argument("--b_size", type=int, default=32)
     parser.add_argument("--max_feat", type=int,default=10000)
@@ -293,8 +263,6 @@ if __name__ == '__main__':
                         help='use CUDA')
     parser.add_argument('--balance', action='store_true',
                         help='balance class in batches')
-    parser.add_argument('--class_weights', action='store_true',
-                        help='use CUDA')
     parser.add_argument('filename', type=str)
     args = parser.parse_args()
     main(args)
