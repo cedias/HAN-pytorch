@@ -32,7 +32,7 @@ class AttentionalBiGRU(nn.Module):
         all_att = self._masked_softmax(attend,self._list_to_bytemask(list(len_s))).transpose(0,1) # attW,sent 
         attended = all_att.unsqueeze(2).expand_as(enc_sents) * enc_sents
         
-        return attended.sum(0).squeeze(0)
+        return attended.sum(0,True).squeeze(0)
 
     def _list_to_bytemask(self,l):
         mask = self._buffers['mask'].resize_(len(l),l[0]).fill_(1)
@@ -45,7 +45,7 @@ class AttentionalBiGRU(nn.Module):
     
     def _masked_softmax(self,mat,mask):
         exp = torch.exp(mat) * Variable(mask)
-        sum_exp = exp.sum(1)+0.0001
+        sum_exp = exp.sum(1,True)+0.0001
      
         return exp/sum_exp.expand_as(exp)
 
