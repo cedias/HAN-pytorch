@@ -1,8 +1,8 @@
+
 import sys
 import argparse
 import torch
 import spacy
-
 import pickle as pkl
 import numpy as np
 import torch.nn as nn
@@ -32,10 +32,10 @@ def checkpoint(epoch,net,output):
 def load_embeddings(file):
     emb_file = open(file).readlines()
     first = emb_file[0]
-    word, vec = first.split()[0],np.array(first.split()[1:],dtype=np.float32)
-    size = (len(emb_file),vec.shape[0])
+    print(first)
+    word, vec = int(first.split()[0]),int(first.split()[1])
+    size = (word,vec)
     print("--> Got {} words of {} dimensions".format(size[0],size[1]))
-
     tensor = np.zeros((size[0]+2,size[1]),dtype=np.float32) ## adding padding + unknown
     word_d = {}
     word_d["_padding_"] = 0
@@ -43,10 +43,17 @@ def load_embeddings(file):
 
     print(tensor.shape)
 
-    for i,line in tqdm(enumerate(emb_file,2),desc="Creating embedding tensor",total=len(emb_file)):
-        spl = line.split()
-        word_d[spl[0]] = i
-        tensor[i] = np.array(spl[1:],dtype=np.float32)
+    for i,line in tqdm(enumerate(emb_file,1),desc="Creating embedding tensor",total=len(emb_file)):
+        if i==1: #skipping header (-1 to the enumeration to take it into account)
+            continue
+
+        spl = line.strip().split(" ")
+
+        if len(spl[1:]) == size[1]: #word is most probably whitespace or junk if badly parsed
+            word_d[spl[0]] = i
+            tensor[i] = np.array(spl[1:],dtype=np.float32)
+            
+
 
     return tensor, word_d
 
@@ -54,8 +61,7 @@ def tuple_batcher_builder(vectorizer, train=True):
 
     def tuple_batch(l):
         review,rating = zip(*l)
-        r_t = torch.Tensor(rating).long() -1
-
+        r_t = torch.max(torch.zeros(1).long(),torch.Tensor(rating).long() - 1)
         list_rev = vectorizer.vectorize_batch(review,train)
 
         # sorting by sentence-review length
@@ -70,11 +76,9 @@ def tuple_batcher_builder(vectorizer, train=True):
                 
         stat = [(ls,lr,r_n,s_n) for ls,lr,r_n,s_n,_ in stat]
         
-        return batch_t,r_t, stat
+        return batch_t,r_t, stat,review
 
     return tuple_batch
-
-
 
 
 def tuple2var(tensors,data):
@@ -102,23 +106,20 @@ def train(epoch,net,optimizer,dataset,criterion,cuda):
     data_tensors = new_tensors(2,cuda,types={0:torch.LongTensor,1:torch.LongTensor}) #data-tensors
 
     with tqdm(total=len(dataset),desc="Training") as pbar:
-        for iteration, (batch_t,r_t,stat) in enumerate(dataset):
+        for iteration, (batch_t,r_t,stat,rev) in enumerate(dataset):
             
             data = tuple2var(data_tensors,(batch_t,r_t))
-
             optimizer.zero_grad()
             out = net(data[0],stat)
-            
             ok,per = accuracy(out,data[1])
-
             loss = criterion(out, data[1])
             epoch_loss += loss.data[0]
             loss.backward()
 
-
             optimizer.step()
 
             ok_all += per.data[0]
+
             
             
 
@@ -136,16 +137,19 @@ def test(epoch,net,dataset,cuda):
     skipped = 0
     data_tensors = new_tensors(2,cuda,types={0:torch.LongTensor,1:torch.LongTensor}) #data-tensors
     with tqdm(total=len(dataset),desc="Evaluating") as pbar:
-        for iteration, (batch_t,r_t, stat) in enumerate(dataset):
+        for iteration, (batch_t,r_t, stat,rev) in enumerate(dataset):
             data = tuple2var(data_tensors,(batch_t,r_t))
-            out = net(data[0],stat)
+            out,att = net.forward_visu(data[0],stat)
 
             ok,per = accuracy(out,data[1])
             ok_all += per.data[0]
             pred+=1
+
+
             
             pbar.update(1)
             pbar.set_postfix({"acc":ok_all/pred, "skipped":skipped})
+
 
     print("===> TEST Complete:  {}% accuracy".format(ok_all/pred))
 
@@ -209,7 +213,7 @@ def main(args):
 
     if args.emb:
         tensor,dic = load_embeddings(args.emb)
-        net = HierarchicalDoc(ntoken=len(dic),num_class=num_class)
+        net = HierarchicalDoc(ntoken=len(dic),emb_size=len(tensor[1]),num_class=num_class)
         net.set_emb_tensor(torch.FloatTensor(tensor))
         vectorizer.word_dict = dic
     else:
@@ -228,16 +232,16 @@ def main(args):
         sampler_t = BucketSampler(test_set)
 
 
-    dataloader = DataLoader(train_set, batch_size=args.b_size, shuffle=False, sampler=sampler, num_workers=1, collate_fn=tuple_batch)#, collate_fn=<function default_collate>, pin_memory=False)
-    dataloader_test = DataLoader(test_set, batch_size=args.b_size, shuffle=False,sampler=sampler_t,  num_workers=1, collate_fn=tuple_batch_test)#, collate_fn=<function default_collate>, pin_memory=False)
+        dataloader = DataLoader(train_set, batch_size=args.b_size, shuffle=False, sampler=sampler, num_workers=2, collate_fn=tuple_batch,pin_memory=True)
+        dataloader_test = DataLoader(test_set, batch_size=args.b_size, shuffle=False,  num_workers=2, collate_fn=tuple_batch_test)
+    else:
+        dataloader = DataLoader(train_set, batch_size=args.b_size, shuffle=True, num_workers=2, collate_fn=tuple_batch,pin_memory=True)
+        dataloader_test = DataLoader(test_set, batch_size=args.b_size, shuffle=True, num_workers=2, collate_fn=tuple_batch_test)
 
 
     criterion = torch.nn.CrossEntropyLoss()
       
 
- 
-    
-    
 
     if args.cuda:
         net.cuda()
@@ -245,12 +249,13 @@ def main(args):
     print("-"*20)
 
 
-    optimizer = optim.RMSprop(net.parameters(),lr=args.lr)
+    optimizer = optim.SGD(net.parameters(),lr=args.lr)
     torch.nn.utils.clip_grad_norm(net.parameters(), 0.5)
 
 
     for epoch in range(1, args.epochs + 1):
-        train(epoch,net,optimizer,dataloader,criterion,args.cuda)
+        for _ in range(10):
+            train(epoch,net,optimizer,dataloader,criterion,args.cuda)
         test(epoch,net,dataloader_test,args.cuda)
 
 
@@ -258,13 +263,13 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Hierarchical Attention Networks for Document Classification')
     parser.add_argument("--split", type=int, default=0)
-    parser.add_argument("--b_size", type=int, default=32)
-    parser.add_argument("--max_feat", type=int,default=10000)
+    parser.add_argument("--b-size", type=int, default=32)
+    parser.add_argument("--max-feat", type=int,default=10000)
     parser.add_argument("--epochs", type=int,default=10)
-    parser.add_argument("--clip_grad", type=float,default=0.25)
+    parser.add_argument("--clip-grad", type=float,default=0.25)
     parser.add_argument("--lr", type=float, default=0.01)
-    parser.add_argument("--max_words", type=int,default=32)
-    parser.add_argument("--max_sents",type=int,default=8)
+    parser.add_argument("--max-words", type=int,default=32)
+    parser.add_argument("--max-sents",type=int,default=8)
     parser.add_argument("--emb", type=str)
     parser.add_argument("--output", type=str)
     parser.add_argument('--cuda', action='store_true',

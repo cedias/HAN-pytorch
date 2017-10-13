@@ -1,7 +1,8 @@
-import torch
+import spacy
 import random
 import pickle as pkl
 import numpy as np
+import torch
 import itertools
 
 import torch.utils.data as data
@@ -14,7 +15,6 @@ from itertools import groupby
 from operator import itemgetter
 from collections import OrderedDict
 import pickle as pkl
-import spacy
 from random import choice, random
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.data.sampler import Sampler
@@ -39,6 +39,7 @@ class TuplesListDataset(Dataset):
                 yield x[field]
 
         return field_iterator
+
 
     def get_stats(self,field):
         d =  dict(Counter(self.field_iter(field)()))
@@ -103,16 +104,15 @@ class BucketSampler(Sampler):
 
 class Vectorizer():
 
-    def __init__(self,word_dict=None,max_sent_len=8,max_word_len=32):
+    def __init__(self,word_dict=None,max_sent_len=8,max_word_len=32,prebuild_tokenizer=True):
         self.word_dict = word_dict
-        self.nlp = spacy.load('en')
+        self.nlp = spacy.load('en_depent_web_md')
         self.max_sent_len = max_sent_len
         self.max_word_len = max_word_len
 
 
     def _get_words_dict(self,data,max_words):
-        word_counter = Counter(w.lower_ for doc in tqdm(list(data()),desc="counting words") for w in self.nlp.tokenizer(doc))
-        dict_w =  {w: i for i,(w,_) in tqdm(enumerate(word_counter.most_common(max_words),start=2),desc="building word dict",total=max_words)}
+        word_counter = Counter(w.lower_ for w in self.nlp.tokenizer((doc for doc in data())))
         dict_w["_padding_"] = 0
         dict_w["_unk_word_"] = 1
         print("Dictionnary has {} words".format(len(dict_w)))
