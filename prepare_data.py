@@ -60,11 +60,13 @@ def build_dataset(args):
         def next(self):
             if self.x < self.stop:
                 self.x += 1
-                return list(w.orth_ for w in self.tok[self.x-1] if w.orth_ != " ") #whitespace shouldn't be a word.
+                return list(w.orth_ for w in self.tok[self.x-1] if len(w.orth_.strip()) >= 1 ) #whitespace shouldn't be a word.
             else:
                 self.x = 0
                 raise StopIteration 
         __next__ = next
+
+
 
 
     print("Building dataset from : {}".format(args.input))
@@ -73,6 +75,8 @@ def build_dataset(args):
     nlp = spacy.load('en')
 
     tokenized = [tok for tok in tqdm(nlp.tokenizer.pipe((x["reviewText"] for x in data_generator(args.input)),batch_size=10000, n_threads=8),desc="Tokenizing")]
+
+    
 
     if args.create_emb:
         w2vmodel = gensim.models.Word2Vec(TokIt(tokenized), size=args.emb_size, window=5, min_count=5, iter=args.epochs, max_vocab_size=args.dic_size, workers=4)
