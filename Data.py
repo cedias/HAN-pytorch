@@ -104,15 +104,15 @@ class BucketSampler(Sampler):
 
 class Vectorizer():
 
-    def __init__(self,word_dict=None,max_sent_len=8,max_word_len=32,prebuild_tokenizer=True):
+    def __init__(self,word_dict=None,max_sent_len=8,max_word_len=32):
         self.word_dict = word_dict
-        self.nlp = spacy.load('en_depent_web_md')
+        self.nlp = spacy.load('en')
         self.max_sent_len = max_sent_len
         self.max_word_len = max_word_len
 
 
     def _get_words_dict(self,data,max_words):
-        word_counter = Counter(w.lower_ for w in self.nlp.tokenizer((doc for doc in data())))
+        word_counter = Counter(w.lower_ for w in self.nlp.tokenizer.pipe((doc for doc in data())))
         dict_w["_padding_"] = 0
         dict_w["_unk_word_"] = 1
         print("Dictionnary has {} words".format(len(dict_w)))
@@ -127,7 +127,7 @@ class Vectorizer():
     def _vect_dict(self,t,train):
 
         if self.word_dict is None:
-            print("No dictionnary to vectorize text \n-> method build_dict needed to be called first")
+            print("No dictionnary to vectorize text \n-> call method build_dict \n-> or set a word_dict attribute \n first")
             raise Exception
 
         revs = []

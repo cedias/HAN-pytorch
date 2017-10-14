@@ -66,7 +66,6 @@ class HierarchicalDoc(nn.Module):
 
     def __init__(self, ntoken, num_class, emb_size=200, hid_size=50):
         super(HierarchicalDoc, self).__init__()
-        self._gpu = nn.Parameter(torch.Tensor())
 
         self.embed = nn.Embedding(ntoken, emb_size,padding_idx=0,sparse=True)
         self.word = AttentionalBiGRU(emb_size, hid_size)
@@ -83,7 +82,7 @@ class HierarchicalDoc(nn.Module):
         
     def _reorder_sent(self,sents,stats):
         
-        sort_r = sorted([(l,r,s,i) for i,(l,r,s) in enumerate(stats)], key = itemgetter(0,1,2)) #(len(r),r#,s#)
+        sort_r = sorted([(l,r,s,i) for i,(l,r,s) in enumerate(stats)], key=itemgetter(0,1,2)) #(len(r),r#,s#)
         builder = OrderedDict()
         
         for (l,r,s,i) in sort_r:
@@ -144,5 +143,7 @@ class HierarchicalDoc(nn.Module):
         out = self.lin_out(final_emb)
         
         return out,att_s
+
+
 
 

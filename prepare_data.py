@@ -28,7 +28,7 @@ def count_lines(file):
 def build_dataset(args):
 
     def preprocess(data):
-        return (data['reviewText'],min(1,int(float(data["overall"])))) #zero is useless
+        return (data['reviewText'],max(1,int(float(data["overall"])))) #zero is useless
 
     def preprocess_rescale(data):
         rating = data["overall"]
@@ -41,7 +41,7 @@ def build_dataset(args):
             else:
                 rating = 0
 
-        return (data['reviewText'],min(1,int(float(data["overall"])))) #zero is useless
+        return (data['reviewText'],max(1,int(float(data["overall"])))) #zero is useless
 
     def data_generator(data):
         with gzip.open(args.input,"r") as f:
@@ -60,7 +60,7 @@ def build_dataset(args):
         def next(self):
             if self.x < self.stop:
                 self.x += 1
-                return list(w.orth_ for w in self.tok[self.x-1])
+                return list(w.orth_ for w in self.tok[self.x-1] if w.orth_ != " ") #whitespace shouldn't be a word.
             else:
                 self.x = 0
                 raise StopIteration 
@@ -75,7 +75,7 @@ def build_dataset(args):
     tokenized = [tok for tok in tqdm(nlp.tokenizer.pipe((x["reviewText"] for x in data_generator(args.input)),batch_size=10000, n_threads=8),desc="Tokenizing")]
 
     if args.create_emb:
-        w2vmodel = gensim.models.Word2Vec(TokIt(tokenized), size=args.emb_size, window=5,min_count=0,iter=args.epochs, max_vocab_size=args.dic_size, workers=4)
+        w2vmodel = gensim.models.Word2Vec(TokIt(tokenized), size=args.emb_size, window=5, min_count=5, iter=args.epochs, max_vocab_size=args.dic_size, workers=4)
         print(len(w2vmodel.wv.vocab))
         w2vmodel.wv.save_word2vec_format(args.emb_file,total_vec=len(w2vmodel.wv.vocab))        
 
@@ -112,7 +112,7 @@ if __name__ == '__main__':
     parser.add_argument("--create-emb",action="store_true")
     parser.add_argument("--emb-file", type=str, default=None)
     parser.add_argument("--emb-size",type=int, default=100)
-    parser.add_argument("--dic-size", type=int,default=10000)
+    parser.add_argument("--dic-size", type=int,default=100000)
     parser.add_argument("--epochs", type=int,default=10)
     args = parser.parse_args()
 

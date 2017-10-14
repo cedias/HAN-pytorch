@@ -32,7 +32,6 @@ def checkpoint(epoch,net,output):
 def load_embeddings(file):
     emb_file = open(file).readlines()
     first = emb_file[0]
-    print(first)
     word, vec = int(first.split()[0]),int(first.split()[1])
     size = (word,vec)
     print("--> Got {} words of {} dimensions".format(size[0],size[1]))
@@ -41,6 +40,7 @@ def load_embeddings(file):
     word_d["_padding_"] = 0
     word_d["_unk_word_"] = 1
 
+    print("--> Shape with padding and unk_token:")
     print(tensor.shape)
 
     for i,line in tqdm(enumerate(emb_file,1),desc="Creating embedding tensor",total=len(emb_file)):
@@ -52,10 +52,25 @@ def load_embeddings(file):
         if len(spl[1:]) == size[1]: #word is most probably whitespace or junk if badly parsed
             word_d[spl[0]] = i
             tensor[i] = np.array(spl[1:],dtype=np.float32)
-            
+        else:
+            print("WARNING: MALFORMED EMBEDDING DICTIONNARY:\n {} \n line isn't parsed correctly".format(line))
 
+    try:
+        assert(len(word_d)==size[0]+2)
+    except:
+        print("Final dictionnary length differs from number of embeddings - some lines were malformed.")
 
     return tensor, word_d
+
+def save(net,dic,path):
+    dict_m = net.state_dict()
+    dict_m["word_dic"] = dic
+    dict_m["reviews"] = torch.Tensor()
+    dict_m["word.mask"] = torch.Tensor()
+    dict_m["sent.mask"] = torch.Tensor()
+
+    torch.save(dict_m,path)
+
 
 def tuple_batcher_builder(vectorizer, train=True):
 
@@ -120,9 +135,6 @@ def train(epoch,net,optimizer,dataset,criterion,cuda):
 
             ok_all += per.data[0]
 
-            
-            
-
             pbar.update(1)
             pbar.set_postfix({"acc":ok_all/(iteration+1),"CE":epoch_loss/(iteration+1)})
 
@@ -145,15 +157,11 @@ def test(epoch,net,dataset,cuda):
             ok_all += per.data[0]
             pred+=1
 
-
-            
             pbar.update(1)
             pbar.set_postfix({"acc":ok_all/pred, "skipped":skipped})
 
 
     print("===> TEST Complete:  {}% accuracy".format(ok_all/pred))
-
-
 
 def accuracy(out,truth):
     def sm(mat):
@@ -162,7 +170,6 @@ def accuracy(out,truth):
         return exp/sum_exp.expand_as(exp)
 
     _,max_i = torch.max(sm(out),1)
-
 
     eq = torch.eq(max_i,truth).float()
     all_eq = torch.sum(eq)
@@ -211,21 +218,30 @@ def main(args):
 
     vectorizer = Vectorizer(max_word_len=args.max_words,max_sent_len=args.max_sents)
 
-    if args.emb:
-        tensor,dic = load_embeddings(args.emb)
-        net = HierarchicalDoc(ntoken=len(dic),emb_size=len(tensor[1]),num_class=num_class)
-        net.set_emb_tensor(torch.FloatTensor(tensor))
-        vectorizer.word_dict = dic
+    if args.load:
+        state = torch.load(args.load)
+        vectorizer.word_dict = state["word_dic"]
+        net = HierarchicalDoc(ntoken=len(state["word_dic"]),emb_size=state["embed.weight"].size(1),hid_size=state["sent.gru.weight_hh_l0"].size(1),num_class=state["lin_out.weight"].size(0))
+        del state["word_dic"]
+        net.load_state_dict(state)
     else:
-        vectorizer.build_dict(train_set.field_iter(0),args.max_feat)
-        net = HierarchicalDoc(ntoken=len(vectorizer.word_dict),num_class=num_class)
+
+        if args.emb:
+            tensor,dic = load_embeddings(args.emb)
+            print(len(dic))
+            net = HierarchicalDoc(ntoken=len(dic),emb_size=len(tensor[1]),hid_size=args.hid_size,num_class=num_class)
+            net.set_emb_tensor(torch.FloatTensor(tensor))
+            vectorizer.word_dict = dic
+        else:
+            vectorizer.build_dict(train_set.field_iter(0),args.max_feat)
+            net = HierarchicalDoc(ntoken=len(vectorizer.word_dict), emb_size=args.emb_size,hid_size=args.hid_size, num_class=num_class)
 
 
     tuple_batch = tuple_batcher_builder(vectorizer,train=True)
     tuple_batch_test = tuple_batcher_builder(vectorizer,train=False)
- 
-    
 
+
+    
     sampler = None
     if args.balance:
         sampler =  BucketSampler(train_set)
@@ -249,28 +265,43 @@ def main(args):
     print("-"*20)
 
 
-    optimizer = optim.SGD(net.parameters(),lr=args.lr)
-    torch.nn.utils.clip_grad_norm(net.parameters(), 0.5)
+    optimizer = optim.SGD(net.parameters(),lr=args.lr,momentum=args.momentum)
+    torch.nn.utils.clip_grad_norm(net.parameters(), args.clip_grad)
 
 
     for epoch in range(1, args.epochs + 1):
-        for _ in range(10):
-            train(epoch,net,optimizer,dataloader,criterion,args.cuda)
+        train(epoch,net,optimizer,dataloader,criterion,args.cuda)
+        
+
+        if args.snapshot:
+            print("snapshot of model in {}".format(args.save+"_snapshot"))
+            save(net,vectorizer.word_dict,args.save+"_snapshot")
+
         test(epoch,net,dataloader_test,args.cuda)
 
+    if args.save:
+        print("model saved to {}".format(args.save))
+        save(net,vectorizer.word_dict,args.save)
 
 
 if __name__ == '__main__':
+
     parser = argparse.ArgumentParser(description='Hierarchical Attention Networks for Document Classification')
     parser.add_argument("--split", type=int, default=0)
+    parser.add_argument("--emb-size",type=int,default=200)
+    parser.add_argument("--hid-size",type=int,default=50)
     parser.add_argument("--b-size", type=int, default=32)
     parser.add_argument("--max-feat", type=int,default=10000)
     parser.add_argument("--epochs", type=int,default=10)
-    parser.add_argument("--clip-grad", type=float,default=0.25)
+    parser.add_argument("--clip-grad", type=float,default=1)
     parser.add_argument("--lr", type=float, default=0.01)
     parser.add_argument("--max-words", type=int,default=32)
     parser.add_argument("--max-sents",type=int,default=8)
+    parser.add_argument("--momentum",type=float,default=0.9)
     parser.add_argument("--emb", type=str)
+    parser.add_argument("--load", type=str)
+    parser.add_argument("--save", type=str)
+    parser.add_argument("--snapshot", action='store_true')
     parser.add_argument("--output", type=str)
     parser.add_argument('--cuda', action='store_true',
                         help='use CUDA')
@@ -278,4 +309,6 @@ if __name__ == '__main__':
                         help='balance class in batches')
     parser.add_argument('filename', type=str)
     args = parser.parse_args()
+
+
     main(args)
