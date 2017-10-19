@@ -55,7 +55,7 @@ class AttentionalBiGRU(nn.Module):
         return mask
     
     def _masked_softmax(self,mat,mask):
-        exp = torch.exp(mat) * Variable(mask)
+        exp = torch.exp(mat) * Variable(mask,requires_grad=False)
         sum_exp = exp.sum(1,True)+0.0001
      
         return exp/sum_exp.expand_as(exp)
@@ -67,7 +67,7 @@ class HierarchicalDoc(nn.Module):
     def __init__(self, ntoken, num_class, emb_size=200, hid_size=50):
         super(HierarchicalDoc, self).__init__()
 
-        self.embed = nn.Embedding(ntoken, emb_size,padding_idx=0,sparse=True)
+        self.embed = nn.Embedding(ntoken, emb_size,padding_idx=0)
         self.word = AttentionalBiGRU(emb_size, hid_size)
         self.sent = AttentionalBiGRU(hid_size*2, hid_size)
 
@@ -77,6 +77,7 @@ class HierarchicalDoc(nn.Module):
 
 
     def set_emb_tensor(self,emb_tensor):
+        self.emb_size = emb_tensor.size(-1)
         self.embed.weight.data = emb_tensor
 
         
@@ -93,7 +94,7 @@ class HierarchicalDoc(nn.Module):
                 
         list_r = list(reversed(builder))
         
-        revs = Variable(self._buffers["reviews"].resize_(len(builder),len(builder[list_r[0]]),sents.size(1)).fill_(0) )
+        revs = Variable(self._buffers["reviews"].resize_(len(builder),len(builder[list_r[0]]),sents.size(1)).fill_(0), requires_grad=False)
         lens = []
         real_order = []
         

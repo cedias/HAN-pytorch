@@ -19,7 +19,7 @@ from random import choice
 from collections import OrderedDict,Counter
 from Nets import HierarchicalDoc
 from Data import TuplesListDataset, Vectorizer, BucketSampler
-
+import sys
 
 
 
@@ -27,6 +27,27 @@ def checkpoint(epoch,net,output):
     model_out_path = output+"_epoch_{}.pth".format(epoch)
     torch.save(net, model_out_path)
     print("Checkpoint saved to {}".format(model_out_path))
+
+def check_memory(emb_size,max_sents,max_words,b_size,cuda):
+    try:
+        e_size = (2,b_size,max_sents,max_words,emb_size) 
+        d_size = (b_size,max_sents,max_words)
+        t = torch.rand(*e_size)
+        db = torch.rand(*d_size)
+
+        if cuda:
+            db = db.cuda()
+            t = t.cuda()
+
+        print("-> Quick memory check : OK\n")
+
+    except Exception as e:
+        print(e)
+        print("Not enough memory to handle current settings {} ".format(e_size))
+        print("Try lowering sentence size and length.")
+        sys.exit()
+    
+    
 
 
 def load_embeddings(file):
@@ -76,7 +97,7 @@ def tuple_batcher_builder(vectorizer, train=True):
 
     def tuple_batch(l):
         review,rating = zip(*l)
-        r_t = torch.max(torch.zeros(1).long(),torch.Tensor(rating).long() - 1)
+        r_t = torch.Tensor(rating).long()
         list_rev = vectorizer.vectorize_batch(review,train)
 
         # sorting by sentence-review length
@@ -178,6 +199,7 @@ def accuracy(out,truth):
 
 def main(args):
     print(32*"-"+"\nHierarchical Attention Network:\n" + 32*"-")
+
     print("\nLoading Data:\n" + 25*"-")
 
     max_features = args.max_feat
@@ -206,6 +228,14 @@ def main(args):
     class_stats,class_per = train_set.get_stats(1)
     print(class_stats)
     print(class_per)
+
+    class_weight = torch.zeros(len(class_per))
+    for c,p in class_per.items():
+        class_weight[c] = 1-p 
+    print(class_weight)
+
+    if args.cuda:
+        class_weight = class_weight.cuda()
 
     print(10*"-" + "\n Test set:\n" + 10*"-")
     
@@ -255,7 +285,7 @@ def main(args):
         dataloader_test = DataLoader(test_set, batch_size=args.b_size, shuffle=True, num_workers=2, collate_fn=tuple_batch_test)
 
 
-    criterion = torch.nn.CrossEntropyLoss()
+    criterion = torch.nn.CrossEntropyLoss(weight=class_weight)
       
 
 
@@ -264,6 +294,9 @@ def main(args):
     
     print("-"*20)
 
+
+
+    check_memory(args.max_sents,args.max_words,net.emb_size,args.b_size,args.cuda)
 
     optimizer = optim.SGD(net.parameters(),lr=args.lr,momentum=args.momentum)
     torch.nn.utils.clip_grad_norm(net.parameters(), args.clip_grad)
@@ -274,10 +307,10 @@ def main(args):
         
 
         if args.snapshot:
-            print("snapshot of model in {}".format(args.save+"_snapshot"))
+            print("snapshot of model saved as {}".format(args.save+"_snapshot"))
             save(net,vectorizer.word_dict,args.save+"_snapshot")
 
-        test(epoch,net,dataloader_test,args.cuda)
+    test(epoch,net,dataloader_test,args.cuda)
 
     if args.save:
         print("model saved to {}".format(args.save))
@@ -295,7 +328,7 @@ if __name__ == '__main__':
     parser.add_argument("--epochs", type=int,default=10)
     parser.add_argument("--clip-grad", type=float,default=1)
     parser.add_argument("--lr", type=float, default=0.01)
-    parser.add_argument("--max-words", type=int,default=32)
+    parser.add_argument("--max-words", type=int,default=10)
     parser.add_argument("--max-sents",type=int,default=8)
     parser.add_argument("--momentum",type=float,default=0.9)
     parser.add_argument("--emb", type=str)

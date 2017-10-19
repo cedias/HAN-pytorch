@@ -27,21 +27,22 @@ def count_lines(file):
 
 def build_dataset(args):
 
-    def preprocess(data):
-        return (data['reviewText'],max(1,int(float(data["overall"])))) #zero is useless
+    def preprocess(datas):
+        for data in datas:
+            yield (data['reviewText'],max(1,int(float(data["overall"])))-1) #zero is useless, classes between 0-4 for 1-5 reviews
 
-    def preprocess_rescale(data):
-        rating = data["overall"]
+    def preprocess_rescale(datas):
+        for data in datas:
+            rating = max(1,int(float(data["overall"])))-1
 
-        if rescale:
             if rating > 3:
                 rating = 1
             elif rating == 3:
-                return None
+                yield None
+                continue
             else:
                 rating = 0
-
-        return (data['reviewText'],max(1,int(float(data["overall"])))) #zero is useless
+            yield (data['reviewText'],rating) #zero is useless
 
     def data_generator(data):
         with gzip.open(args.input,"r") as f:
@@ -85,11 +86,9 @@ def build_dataset(args):
 
     if args.rescale:
         print("-> Rescaling data to 0-1 (3's are discarded)")
-        data = [preprocess_rescale(dt) for dt,tok in tqdm(zip(data_generator(args.input),tokenized),desc="Processing")]
-        data = [d for d in tqdm(data,desc="Removing Nones, 3's") if d is not None]
-
+        data = [dt for dt in tqdm(preprocess_rescale(data_generator(args.input)),desc="Processing") if dt is not None]
     else:
-        data = [preprocess(dt) for dt,tok in tqdm(zip(data_generator(args.input),tokenized),desc="Processing")]
+        data = [dt for dt in tqdm(preprocess(data_generator(args.input)),desc="Processing")]
 
 
     splits = [randint(0,args.nb_splits-1) for _ in range(0,len(data))]
@@ -117,7 +116,7 @@ if __name__ == '__main__':
     parser.add_argument("--emb-file", type=str, default=None)
     parser.add_argument("--emb-size",type=int, default=100)
     parser.add_argument("--dic-size", type=int,default=100000)
-    parser.add_argument("--epochs", type=int,default=10)
+    parser.add_argument("--epochs", type=int,default=1)
     args = parser.parse_args()
 
     if args.emb_file is None:

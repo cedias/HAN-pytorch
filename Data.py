@@ -121,10 +121,10 @@ class Vectorizer():
     def build_dict(self,text_iterator,max_f):
         self.word_dict = self._get_words_dict(text_iterator,max_f)
 
-    def vectorize_batch(self,t,train=True):
-        return self._vect_dict(t,train)
+    def vectorize_batch(self,t,trim=True):
+        return self._vect_dict(t,trim)
 
-    def _vect_dict(self,t,train):
+    def _vect_dict(self,t,trim):
 
         if self.word_dict is None:
             print("No dictionnary to vectorize text \n-> call method build_dict \n-> or set a word_dict attribute \n first")
@@ -135,13 +135,13 @@ class Vectorizer():
             review = []
             for j,sent in enumerate(self.nlp(rev).sents):  
 
-                if train and j>= self.max_sent_len:
+                if trim and j>= self.max_sent_len:
                     break
                 s = []
                 for k,word in enumerate(sent):
                     word = word.lower_
 
-                    if train and k >= self.max_word_len:
+                    if trim and k >= self.max_word_len:
                         break
 
                     if word in self.word_dict:
