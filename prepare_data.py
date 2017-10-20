@@ -115,7 +115,7 @@ if __name__ == '__main__':
     parser.add_argument("--create-emb",action="store_true")
     parser.add_argument("--emb-file", type=str, default=None)
     parser.add_argument("--emb-size",type=int, default=100)
-    parser.add_argument("--dic-size", type=int,default=100000)
+    parser.add_argument("--dic-size", type=int,default=10000000)
     parser.add_argument("--epochs", type=int,default=1)
     args = parser.parse_args()
 

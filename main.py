@@ -93,12 +93,12 @@ def save(net,dic,path):
     torch.save(dict_m,path)
 
 
-def tuple_batcher_builder(vectorizer, train=True):
+def tuple_batcher_builder(vectorizer, trim=True):
 
     def tuple_batch(l):
         review,rating = zip(*l)
         r_t = torch.Tensor(rating).long()
-        list_rev = vectorizer.vectorize_batch(review,train)
+        list_rev = vectorizer.vectorize_batch(review,trim)
 
         # sorting by sentence-review length
         stat =  sorted([(len(s),len(r),r_n,s_n,s) for r_n,r in enumerate(list_rev) for s_n,s in enumerate(r)],reverse=True)
@@ -267,8 +267,8 @@ def main(args):
             net = HierarchicalDoc(ntoken=len(vectorizer.word_dict), emb_size=args.emb_size,hid_size=args.hid_size, num_class=num_class)
 
 
-    tuple_batch = tuple_batcher_builder(vectorizer,train=True)
-    tuple_batch_test = tuple_batcher_builder(vectorizer,train=False)
+    tuple_batch = tuple_batcher_builder(vectorizer,trim=True)
+    tuple_batch_test = tuple_batcher_builder(vectorizer,trim=True)
 
 
     
@@ -298,7 +298,7 @@ def main(args):
 
     check_memory(args.max_sents,args.max_words,net.emb_size,args.b_size,args.cuda)
 
-    optimizer = optim.SGD(net.parameters(),lr=args.lr,momentum=args.momentum)
+    optimizer = optim.Adam(net.parameters())#,lr=args.lr,momentum=args.momentum)
     torch.nn.utils.clip_grad_norm(net.parameters(), args.clip_grad)
 
 
@@ -328,8 +328,8 @@ if __name__ == '__main__':
     parser.add_argument("--epochs", type=int,default=10)
     parser.add_argument("--clip-grad", type=float,default=1)
     parser.add_argument("--lr", type=float, default=0.01)
-    parser.add_argument("--max-words", type=int,default=10)
-    parser.add_argument("--max-sents",type=int,default=8)
+    parser.add_argument("--max-words", type=int,default=32)
+    parser.add_argument("--max-sents",type=int,default=16)
     parser.add_argument("--momentum",type=float,default=0.9)
     parser.add_argument("--emb", type=str)
     parser.add_argument("--load", type=str)
