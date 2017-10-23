@@ -218,8 +218,11 @@ def main(args):
     print("Train set length:",len(train_set))
     print("Test set length:",len(test_set))
 
-    classes = train_set.get_class_dict(1)
+    classes = train_set.get_class_dict(1) #create class mapping
+    test_set.set_class_mapping(1,classes) #set same class mapping
     num_class = len(classes)
+
+    print(classes)
 
     
     print(25*"-"+"\nClass stats:\n" + 25*"-")
@@ -229,13 +232,15 @@ def main(args):
     print(class_stats)
     print(class_per)
 
-    class_weight = torch.zeros(len(class_per))
-    for c,p in class_per.items():
-        class_weight[c] = 1-p 
-    print(class_weight)
+    if args.weight_classes:
+        class_weight = torch.zeros(num_class)
+        for c,p in class_per.items():
+            class_weight[c] = 1-p 
 
-    if args.cuda:
-        class_weight = class_weight.cuda()
+        print(class_weight)
+
+        if args.cuda:
+            class_weight = class_weight.cuda()
 
     print(10*"-" + "\n Test set:\n" + 10*"-")
     
@@ -243,8 +248,6 @@ def main(args):
     print(test_stats) 
     print(test_per)
 
-
-    print(25*"-" + "\nBuilding word vectors: \n"+"-"*25)
 
     vectorizer = Vectorizer(max_word_len=args.max_words,max_sent_len=args.max_sents)
 
@@ -263,6 +266,7 @@ def main(args):
             net.set_emb_tensor(torch.FloatTensor(tensor))
             vectorizer.word_dict = dic
         else:
+            print(25*"-" + "\nBuilding word vectors: \n"+"-"*25)
             vectorizer.build_dict(train_set.field_iter(0),args.max_feat)
             net = HierarchicalDoc(ntoken=len(vectorizer.word_dict), emb_size=args.emb_size,hid_size=args.hid_size, num_class=num_class)
 
@@ -285,7 +289,10 @@ def main(args):
         dataloader_test = DataLoader(test_set, batch_size=args.b_size, shuffle=True, num_workers=2, collate_fn=tuple_batch_test)
 
 
-    criterion = torch.nn.CrossEntropyLoss(weight=class_weight)
+    if args.weight_classes:
+        criterion = torch.nn.CrossEntropyLoss(weight=class_weight)
+    else:
+        criterion = torch.nn.CrossEntropyLoss()
       
 
 
@@ -335,6 +342,7 @@ if __name__ == '__main__':
     parser.add_argument("--load", type=str)
     parser.add_argument("--save", type=str)
     parser.add_argument("--snapshot", action='store_true')
+    parser.add_argument("--weight-classes", action='store_true')
     parser.add_argument("--output", type=str)
     parser.add_argument('--cuda', action='store_true',
                         help='use CUDA')

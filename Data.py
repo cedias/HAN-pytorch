@@ -20,23 +20,30 @@ from torch.utils.data import DataLoader, Dataset
 from torch.utils.data.sampler import Sampler
 
 
-
 class TuplesListDataset(Dataset):
 
     def __init__(self, tuplelist):
         super(TuplesListDataset, self).__init__()
         self.tuplelist = tuplelist
+        self.data2class = None
+        self.class_field = None
 
     def __len__(self):
         return len(self.tuplelist)
 
     def __getitem__(self,index):
-        return self.tuplelist[index]
+        if self.data2class is None:
+            return self.tuplelist[index]
+        else:
+            t = list(self.tuplelist[index])
+            t[self.class_field] = self.data2class[t[self.class_field]]
+            return tuple(t)
 
     def field_iter(self,field):
+
         def field_iterator():
-            for x in self.tuplelist:
-                yield x[field]
+            for i in range(len(self)):
+                yield self[i][field]
 
         return field_iterator
 
@@ -49,8 +56,15 @@ class TuplesListDataset(Dataset):
         return d,class_per
 
     def get_class_dict(self,field):
-        self.class_mapping = {i:c for i,c in  enumerate(sorted(list(set(self.field_iter(field)()))))}
-        return self.class_mapping
+        self.class_field = field
+        self.class2data = {i:c for i,c in enumerate(sorted(list(set(self.field_iter(field)()))))}
+        self.data2class = {c:i for i,c in self.class2data.items()}
+        return self.class2data
+
+    def set_class_mapping(self,field,mapping):
+        self.class_field = field
+        self.class2data = mapping
+        self.data2class = {c:i for i,c in self.class2data.items()}
 
     @staticmethod
     def build_train_test(datatuples,splits,split_num=0):
@@ -112,7 +126,8 @@ class Vectorizer():
 
 
     def _get_words_dict(self,data,max_words):
-        word_counter = Counter(w.lower_ for w in self.nlp.tokenizer.pipe((doc for doc in data())))
+        word_counter = Counter(w.lower_ for d in self.nlp.tokenizer.pipe((doc for doc in tqdm(data(),desc="Tokenizing data"))) for w in d)
+        dict_w =  {w: i for i,(w,_) in tqdm(enumerate(word_counter.most_common(max_words),start=2),desc="building word dict",total=max_words)}
         dict_w["_padding_"] = 0
         dict_w["_unk_word_"] = 1
         print("Dictionnary has {} words".format(len(dict_w)))
