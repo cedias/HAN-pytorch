@@ -29,11 +29,11 @@ def build_dataset(args):
 
     def preprocess(datas):
         for data in datas:
-            yield (data['reviewText'],max(1,int(float(data["overall"])))-1) #zero is useless, classes between 0-4 for 1-5 reviews
+            yield (data['reviewText'],max(1,int(round(float(data["overall"]))))-1) #zero is useless, classes between 0-4 for 1-5 reviews
 
     def preprocess_rescale(datas):
         for data in datas:
-            rating = max(1,int(float(data["overall"])))-1
+            rating = max(1,int(round(float(data["overall"]))))-1
 
             if rating > 3:
                 rating = 1
