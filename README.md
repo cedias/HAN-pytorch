@@ -13,3 +13,6 @@ Batched implementation of [Hierarchical Attention Networks for Document Classifi
 - `Data.py` holds data managing objects.
 - `Nets.py` holds networks.
 - `beer2json.py` is an helper script if you happen to have the ratebeer/beeradvocate datasets.
+
+## Note:
+Currently, the whole dataset is used to create word embeddings which can be an issue. I'll modify this in some upcoming update.
