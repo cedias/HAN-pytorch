@@ -1,3 +1,10 @@
+-----------------
+
+## Deprecated code
+A faster and up to date implementation is [in my other repo](https://github.com/cedias/Hierarchical-Sentiment)
+
+----------------
+
 # HAN-pytorch
 Batched implementation of [Hierarchical Attention Networks for Document Classification paper](https://www.cs.cmu.edu/~diyiy/docs/naacl16.pdf)
 
@@ -15,4 +22,4 @@ Batched implementation of [Hierarchical Attention Networks for Document Classifi
 - `beer2json.py` is an helper script if you happen to have the ratebeer/beeradvocate datasets.
 
 ## Note:
-Currently, the whole dataset is used to create word embeddings which can be an issue. I'll modify this in some upcoming update.
+The whole dataset is used to create word embeddings which can be an issue.
